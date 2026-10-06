@@ -1,0 +1,96 @@
+# Pipeline CI/CD - ci-cd-pipeline-api
+# Proyecto Integrador GPDS (UTEQ)
+#
+# Flujo:
+#   1. test            -> corre en push y pull_request a main: instala deps, corre Jest con cobertura.
+#   2. build-and-push  -> solo en push a main y si "test" paso: construye la imagen Docker,
+#                         la etiqueta :latest y :<sha del commit>, la publica en Docker Hub.
+#   3. deploy          -> solo en push a main y si "build-and-push" paso: se conecta por SSH a la
+#                         instancia EC2, descarga la imagen mas reciente, apaga el contenedor viejo
+#                         y levanta el nuevo en el puerto 80 (despliegue sin pasos manuales).
+#
+# Secrets requeridos (configurados en GitHub: Settings -> Secrets and variables -> Actions):
+#   DOCKERHUB_USERNAME  usuario de Docker Hub
+#   DOCKERHUB_TOKEN     Personal Access Token de Docker Hub (nunca la contrasena)
+#   EC2_HOST            IP publica de la instancia EC2
+#   EC2_USER            usuario SSH (ubuntu)
+#   EC2_SSH_KEY         contenido completo de la llave privada .pem
+
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/ci-cd-pipeline-api
+
+jobs:
+  test:
+    name: Pruebas y cobertura
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Correr pruebas con cobertura
+        run: npm run test:coverage
+
+      - name: Publicar resumen de cobertura en el log del job
+        if: always()
+        run: cat coverage/lcov-report/index.html > /dev/null 2>&1 || true
+
+  build-and-push:
+    name: Build y push a Docker Hub
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Login en Docker Hub (PAT via secret)
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build y push con tags :latest y :sha
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy:
+    name: Desplegar en EC2
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Desplegar via SSH (pull de la imagen mas reciente y reinicio del contenedor)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            docker pull ${{ env.IMAGE_NAME }}:latest
+            docker stop ci-cd-pipeline-api || true
+            docker rm ci-cd-pipeline-api || true
+            docker run -d -p 80:80 --name ci-cd-pipeline-api --restart unless-stopped ${{ env.IMAGE_NAME }}:latest
+            docker image prune -f
