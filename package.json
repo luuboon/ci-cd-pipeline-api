@@ -30,6 +30,12 @@
         "lines": 70,
         "statements": 70
       }
-    }
+    },
+    "coverageReporters": [
+      "text",
+      "text-summary",
+      "json-summary",
+      "lcov"
+    ]
   }
 }

@@ -47,9 +47,9 @@ jobs:
       - name: Correr pruebas con cobertura
         run: npm run test:coverage
 
-      - name: Publicar resumen de cobertura en el log del job
+      - name: Mostrar resumen de cobertura en el log del job
         if: always()
-        run: cat coverage/lcov-report/index.html > /dev/null 2>&1 || true
+        run: cat coverage/coverage-summary.json
 
   build-and-push:
     name: Build y push a Docker Hub
