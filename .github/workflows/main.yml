@@ -89,8 +89,8 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-            docker pull ${{ env.IMAGE_NAME }}:latest
-            docker stop ci-cd-pipeline-api || true
-            docker rm ci-cd-pipeline-api || true
-            docker run -d -p 80:80 --name ci-cd-pipeline-api --restart unless-stopped ${{ env.IMAGE_NAME }}:latest
-            docker image prune -f
+            sudo docker pull ${{ env.IMAGE_NAME }}:latest
+            sudo docker stop ci-cd-pipeline-api || true
+            sudo docker rm ci-cd-pipeline-api || true
+            sudo docker run -d -p 80:80 --name ci-cd-pipeline-api --restart unless-stopped ${{ env.IMAGE_NAME }}:latest
+            sudo docker image prune -f
