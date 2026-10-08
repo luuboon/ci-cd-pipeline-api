@@ -12,7 +12,8 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.status(200).json({
     service: "ci-cd-pipeline-api",
-    status: "up",
+    status: "upi",
+    version: "1.5.0",
     endpoints: [
       "GET    /api/health",
       "GET    /api/users",
